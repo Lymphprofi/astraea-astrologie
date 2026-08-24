@@ -82,7 +82,7 @@ def get_planet_positions(date_obj, time_obj):
 
 
 def ask_ai(prompt):
-    """KI-Generator mit klaren Fehlermeldungen für Streamlit Cloud und Ollama."""
+    """KI-Generator für Streamlit Cloud (Groq) und lokalen PC (Ollama)."""
     
     # 1. OPTION: Streamlit Cloud via Groq API
     if "GROQ_API_KEY" in st.secrets:
@@ -93,7 +93,7 @@ def ask_ai(prompt):
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
                 stream=True,
             )
