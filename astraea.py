@@ -1,6 +1,7 @@
 import streamlit as st
 import ephem
 from datetime import datetime
+import math
 
 # --- KI-BIBLIOTHEKEN IMPORTIEREN ---
 try:
@@ -43,8 +44,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-# --- HILFSFUNKTIONEN FÜR ASTROLOGIE ---
+# --- KORRIGIERTE ASTROLOGIE-FUNKTION ---
 def get_planet_positions(date_obj, time_obj):
+    """Berechnet die Planetenstände präzise ohne Fließkomma-Fehler."""
     date_str = f"{date_obj.strftime('%Y/%m/%d')} {time_obj.strftime('%H:%M:%S')}"
     observer = ephem.Observer()
     observer.date = date_str
@@ -71,16 +73,21 @@ def get_planet_positions(date_obj, time_obj):
     positions = {}
     for name, body in planets.items():
         body.compute(observer)
-        lon = ephem.Ecliptic(body).lon
-        deg_total = float(lon) * (180.0 / 3.141592653589793)
+        # lon ist im Bogenmaß -> math.degrees wandelt es exakt in Grad um
+        lon_rad = float(ephem.Ecliptic(body).lon)
+        deg_total = math.degrees(lon_rad) % 360
+        
         sign_index = int(deg_total // 30) % 12
         deg_in_sign = deg_total % 30
+        
+        # Saubere Formatierung als Text
         positions[name] = f"{zodiac_signs[sign_index]} ({deg_in_sign:.1f}°)"
 
     return positions
 
 
 def ask_ai_text(prompt):
+    """Ruft die KI auf und gibt reinen Text zurück."""
     if "GROQ_API_KEY" in st.secrets:
         if not groq_available:
             return "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert."
@@ -146,6 +153,7 @@ if "chat_messages" not in st.session_state:
 st.title("🌟 Astraea – Deinetwegen stehen die Sterne gut")
 st.write("Erstelle dein individuelles Horoskop und erhalte präzise astrologische KI-Analysen.")
 
+# Sidebar Geburtsdaten
 st.sidebar.header("📋 Geburtsdaten eingeben")
 name = st.sidebar.text_input("Name", value="Max Mustermann")
 birth_date = st.sidebar.date_input(
@@ -157,13 +165,13 @@ birth_date = st.sidebar.date_input(
 birth_time = st.sidebar.time_input("Geburtszeit", value=datetime.strptime("14:30", "%H:%M").time())
 location = st.sidebar.text_input("Geburtsort", value="Berlin")
 
-# Klick auf Berechnen setzt den Zustand zurück
+# Berechnen-Button
 if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.session_state["positions"] = get_planet_positions(birth_date, birth_time)
     st.session_state["initial_analysis"] = None
     st.session_state["chat_messages"] = []
 
-# Wenn Planetenstände berechnet wurden:
+# Hauptanzeige
 if st.session_state["positions"] is not None:
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
@@ -186,7 +194,7 @@ if st.session_state["positions"] is not None:
     st.markdown("---")
     st.subheader("📜 KI-Deutung & Horoskop-Interpretation")
 
-    # Erst-Analyse genau einmal generieren
+    # Erst-Analyse
     if st.session_state["initial_analysis"] is None:
         prompt_text = f"""
         Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
@@ -209,19 +217,17 @@ if st.session_state["positions"] is not None:
     st.markdown("---")
     st.subheader("💬 Chatte mit Astraea über dein Horoskop")
 
-    # Bisherige Nachrichten im Chat-Verlauf rendern
+    # Bisherigen Chatverlauf anzeigen
     for message in st.session_state["chat_messages"]:
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    # Festes Chat-Eingabefeld am unteren Rand
+    # Festes Chat-Input am untersten Rand
     if user_input := st.chat_input("Stelle Astraea eine Frage zu deinen Sternen..."):
-        # 1. Nutzernachricht speichern & anzeigen
         st.session_state["chat_messages"].append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.write(user_input)
 
-        # 2. KI-Antwort generieren
         question_prompt = f"""
         Du bist Astraea, eine empathische und erfahrene Astrologin.
         Nutzer: {name}
@@ -236,7 +242,6 @@ if st.session_state["positions"] is not None:
                 bot_response = ask_ai_text(question_prompt)
                 st.write(bot_response)
 
-        # 3. Antwort im Verlauf speichern
         st.session_state["chat_messages"].append({"role": "assistant", "content": bot_response})
 
 st.markdown("---")
