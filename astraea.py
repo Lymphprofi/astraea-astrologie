@@ -23,9 +23,29 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom Styling (Dunkles mystisches Theme)
+st.markdown("""
+    <style>
+    .main {
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        color: #ffffff;
+    }
+    .stButton>button {
+        background-color: #6a11cb;
+        background-image: linear-gradient(225deg, #6a11cb 0%, #2575fc 100%);
+        color: white;
+        border-radius: 10px;
+        border: none;
+        padding: 10px 24px;
+        font-weight: bold;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 
 # --- HILFSFUNKTIONEN FÜR ASTROLOGIE ---
 def get_planet_positions(date_obj, time_obj):
+    """Berechnet präzise die Positionsdaten der Planeten."""
     dt = datetime.combine(date_obj, time_obj)
     observer = ephem.Observer()
     observer.date = dt
@@ -62,8 +82,14 @@ def get_planet_positions(date_obj, time_obj):
 
 
 def ask_ai(prompt):
-    # 1. Option: Streamlit Cloud via Groq API
-    if "GROQ_API_KEY" in st.secrets and groq_available:
+    """KI-Generator mit klaren Fehlermeldungen für Streamlit Cloud und Ollama."""
+    
+    # 1. OPTION: Streamlit Cloud via Groq API
+    if "GROQ_API_KEY" in st.secrets:
+        if not groq_available:
+            yield "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert. Bitte trage 'groq' in deine requirements.txt ein."
+            return
+        
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
             response = client.chat.completions.create(
@@ -76,9 +102,10 @@ def ask_ai(prompt):
                     yield chunk.choices[0].delta.content
             return
         except Exception as e:
-            st.error(f"Groq API Fehler: {e}")
+            yield f"⚠️ Fehler beim Groq API-Aufruf: {e}"
+            return
 
-    # 2. Option: Lokales Ollama auf dem PC
+    # 2. OPTION: Lokales Ollama auf dem PC
     if ollama_available:
         try:
             stream = ollama.chat(
@@ -90,10 +117,12 @@ def ask_ai(prompt):
                 if 'message' in chunk and 'content' in chunk['message']:
                     yield chunk['message']['content']
             return
-        except Exception:
-            pass
+        except Exception as e:
+            yield f"⚠️ Lokales Ollama nicht erreichbar: {e}"
+            return
 
-    yield "⚠️ Keine KI-Verbindung verfügbar. Bitte prüfe die Groq-Secrets in Streamlit Cloud."
+    # Fallback, wenn GROQ_API_KEY in st.secrets fehlt
+    yield "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden. Bitte gehe in Streamlit Cloud auf Settings -> Secrets und trage GROQ_API_KEY = \"gsk_...\" ein."
 
 
 # --- OBERFLÄCHE (STREAMLIT APP) ---
@@ -110,9 +139,11 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
 
+    # Berechnungen durchführen
     with st.spinner("Berechne Planetenstände..."):
         positions = get_planet_positions(birth_date, birth_time)
 
+    # 2-Spalten-Anzeige für die Planeten
     col1, col2 = st.columns(2)
     items = list(positions.items())
     half = len(items) // 2
@@ -128,6 +159,7 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.markdown("---")
     st.subheader("📜 KI-Deutung & Horoskop-Interpretation")
 
+    # KI Prompt vorbereiten
     prompt_text = f"""
     Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
     Erstelle eine ausführliche persönliche astrologische Analyse für {name}, geboren am {birth_date} um {birth_time} in {location}.
@@ -142,6 +174,7 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     4. Aktuelle Botschaft des Universums (Inspirierender Abschluss)
     """
 
+    # KI-Antwort im Stream ausgeben
     with st.spinner("Astraea verbindet sich mit den Sternen..."):
         st.write_stream(ask_ai(prompt_text))
 
