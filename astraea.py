@@ -133,13 +133,13 @@ def ask_ai_text(prompt):
     return "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden."
 
 
-# --- SPEICHER (SESSION STATE) SCHUTZ ---
+# --- SESSION STATE INITIALISIEREN ---
 if "positions" not in st.session_state:
     st.session_state["positions"] = None
 if "initial_analysis" not in st.session_state:
     st.session_state["initial_analysis"] = None
-if "answers" not in st.session_state:
-    st.session_state["answers"] = []
+if "chat_messages" not in st.session_state:
+    st.session_state["chat_messages"] = []
 
 
 # --- OBERFLÄCHE ---
@@ -157,20 +157,20 @@ birth_date = st.sidebar.date_input(
 birth_time = st.sidebar.time_input("Geburtszeit", value=datetime.strptime("14:30", "%H:%M").time())
 location = st.sidebar.text_input("Geburtsort", value="Berlin")
 
-# Klick auf Berechnen
+# Klick auf Berechnen setzt den Zustand zurück
 if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.session_state["positions"] = get_planet_positions(birth_date, birth_time)
     st.session_state["initial_analysis"] = None
-    st.session_state["answers"] = []
+    st.session_state["chat_messages"] = []
 
-# Wenn ein Horoskop berechnet wurde
+# Wenn Planetenstände berechnet wurden:
 if st.session_state["positions"] is not None:
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
 
     positions = st.session_state["positions"]
 
-    # Planetenstände in 2 Spalten
+    # Planetenstände anzeigen
     col1, col2 = st.columns(2)
     items = list(positions.items())
     half = len(items) // 2
@@ -186,7 +186,7 @@ if st.session_state["positions"] is not None:
     st.markdown("---")
     st.subheader("📜 KI-Deutung & Horoskop-Interpretation")
 
-    # Erst-Analyse generieren (falls noch nicht vorhanden)
+    # Erst-Analyse genau einmal generieren
     if st.session_state["initial_analysis"] is None:
         prompt_text = f"""
         Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
@@ -207,37 +207,37 @@ if st.session_state["positions"] is not None:
     st.write(st.session_state["initial_analysis"])
 
     st.markdown("---")
-    
-    # --- TEXTFELD FÜR FRAGEN (FEST VERANKERT) ---
-    st.subheader("💬 Stelle Astraea eine Frage zu deinem Horoskop")
-    
-    with st.form(key="question_form", clear_on_submit=True):
-        user_question = st.text_input(
-            "Deine Frage an Astraea:", 
-            placeholder="z.B. Was bedeutet mein Mars-Stand für meine Karriere?"
-        )
-        submit_button = st.form_submit_button(label="🔮 Frage stellen")
+    st.subheader("💬 Chatte mit Astraea über dein Horoskop")
 
-    if submit_button and user_question.strip():
+    # Bisherige Nachrichten im Chat-Verlauf rendern
+    for message in st.session_state["chat_messages"]:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    # Festes Chat-Eingabefeld am unteren Rand
+    if user_input := st.chat_input("Stelle Astraea eine Frage zu deinen Sternen..."):
+        # 1. Nutzernachricht speichern & anzeigen
+        st.session_state["chat_messages"].append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.write(user_input)
+
+        # 2. KI-Antwort generieren
         question_prompt = f"""
         Du bist Astraea, eine empathische und erfahrene Astrologin.
         Nutzer: {name}
         Planetenstände: {positions}
         
-        Frage des Nutzers: "{user_question}"
+        Frage des Nutzers: "{user_input}"
         
         Beantworte die Frage präzise, empathisch und astrologisch fundiert auf Basis seiner Planetenstände.
         """
-        with st.spinner("Astraea liest in deinen Sternen..."):
-            answer_text = ask_ai_text(question_prompt)
-            st.session_state["answers"].append((user_question, answer_text))
+        with st.chat_message("assistant"):
+            with st.spinner("Astraea liest in deinen Sternen..."):
+                bot_response = ask_ai_text(question_prompt)
+                st.write(bot_response)
 
-    # Verlauf anzeigen
-    if st.session_state["answers"]:
-        for q, a in reversed(st.session_state["answers"]):
-            st.markdown(f"**❓ Deine Frage:** {q}")
-            st.markdown(f"**🌟 Astraeas Antwort:**\n{a}")
-            st.markdown("---")
+        # 3. Antwort im Verlauf speichern
+        st.session_state["chat_messages"].append({"role": "assistant", "content": bot_response})
 
 st.markdown("---")
 st.caption("🔒 Astraea Astrologie App • Hinweis: Astrologische Interpretationen dienen der Reflexion und Unterhaltung.")
