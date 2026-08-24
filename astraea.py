@@ -82,18 +82,46 @@ def get_planet_positions(date_obj, time_obj):
 
 
 def ask_ai(prompt):
-    """KI-Generator für Streamlit Cloud (Groq) und lokalen PC (Ollama)."""
+    """KI-Generator mit automatischer Modell-Erkennung für Groq."""
     
     # 1. OPTION: Streamlit Cloud via Groq API
     if "GROQ_API_KEY" in st.secrets:
         if not groq_available:
-            yield "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert. Bitte trage 'groq' in deine requirements.txt ein."
+            yield "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert."
             return
         
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+            
+            # Verfügbare Modelle vom Server abfragen
+            available_models = [m.id for m in client.models.list().data]
+            
+            # Prioritätsliste bekannter Groq-Modelle
+            preferred_models = [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "llama3-70b-8192",
+                "llama3-8b-8192",
+                "mixtral-8x7b-32768"
+            ]
+            
+            # Wähle das erste verfügbare Modell aus der Liste
+            selected_model = None
+            for model in preferred_models:
+                if model in available_models:
+                    selected_model = model
+                    break
+            
+            # Fallback auf das allererste verfügbare Modell des Accounts
+            if not selected_model and available_models:
+                selected_model = available_models[0]
+                
+            if not selected_model:
+                yield "⚠️ Keine aktiven Modelle für diesen Groq API-Key gefunden."
+                return
+
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model=selected_model,
                 messages=[{"role": "user", "content": prompt}],
                 stream=True,
             )
@@ -101,6 +129,7 @@ def ask_ai(prompt):
                 if chunk.choices and chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
             return
+            
         except Exception as e:
             yield f"⚠️ Fehler beim Groq API-Aufruf: {e}"
             return
@@ -121,8 +150,7 @@ def ask_ai(prompt):
             yield f"⚠️ Lokales Ollama nicht erreichbar: {e}"
             return
 
-    # Fallback, wenn GROQ_API_KEY in st.secrets fehlt
-    yield "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden. Bitte gehe in Streamlit Cloud auf Settings -> Secrets und trage GROQ_API_KEY = \"gsk_...\" ein."
+    yield "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden."
 
 
 # --- OBERFLÄCHE (STREAMLIT APP) ---
@@ -139,11 +167,9 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
 
-    # Berechnungen durchführen
     with st.spinner("Berechne Planetenstände..."):
         positions = get_planet_positions(birth_date, birth_time)
 
-    # 2-Spalten-Anzeige für die Planeten
     col1, col2 = st.columns(2)
     items = list(positions.items())
     half = len(items) // 2
@@ -159,7 +185,6 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.markdown("---")
     st.subheader("📜 KI-Deutung & Horoskop-Interpretation")
 
-    # KI Prompt vorbereiten
     prompt_text = f"""
     Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
     Erstelle eine ausführliche persönliche astrologische Analyse für {name}, geboren am {birth_date} um {birth_time} in {location}.
@@ -174,7 +199,6 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     4. Aktuelle Botschaft des Universums (Inspirierender Abschluss)
     """
 
-    # KI-Antwort im Stream ausgeben
     with st.spinner("Astraea verbindet sich mit den Sternen..."):
         st.write_stream(ask_ai(prompt_text))
 
