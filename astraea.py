@@ -23,7 +23,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom Styling (Dunkles mystisches Theme)
+# Custom Styling
 st.markdown("""
     <style>
     .main {
@@ -45,9 +45,7 @@ st.markdown("""
 
 # --- HILFSFUNKTIONEN FÜR ASTROLOGIE ---
 def get_planet_positions(date_obj, time_obj):
-    """Berechnet präzise die Positionsdaten der Planeten."""
     date_str = f"{date_obj.strftime('%Y/%m/%d')} {time_obj.strftime('%H:%M:%S')}"
-    
     observer = ephem.Observer()
     observer.date = date_str
 
@@ -83,7 +81,6 @@ def get_planet_positions(date_obj, time_obj):
 
 
 def ask_ai_text(prompt):
-    """Generiert den vollständigen KI-Text für zuverlässige Speicherung im Session State."""
     if "GROQ_API_KEY" in st.secrets:
         if not groq_available:
             return "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert."
@@ -136,20 +133,19 @@ def ask_ai_text(prompt):
     return "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden."
 
 
-# --- SESSION STATE INITIALISIEREN ---
-if "analyzed" not in st.session_state:
-    st.session_state["analyzed"] = False
+# --- SPEICHER (SESSION STATE) SCHUTZ ---
+if "positions" not in st.session_state:
+    st.session_state["positions"] = None
 if "initial_analysis" not in st.session_state:
     st.session_state["initial_analysis"] = None
 if "answers" not in st.session_state:
     st.session_state["answers"] = []
 
 
-# --- OBERFLÄCHE (STREAMLIT APP) ---
+# --- OBERFLÄCHE ---
 st.title("🌟 Astraea – Deinetwegen stehen die Sterne gut")
 st.write("Erstelle dein individuelles Horoskop und erhalte präzise astrologische KI-Analysen.")
 
-# Sidebar Geburtsdaten
 st.sidebar.header("📋 Geburtsdaten eingeben")
 name = st.sidebar.text_input("Name", value="Max Mustermann")
 birth_date = st.sidebar.date_input(
@@ -161,15 +157,14 @@ birth_date = st.sidebar.date_input(
 birth_time = st.sidebar.time_input("Geburtszeit", value=datetime.strptime("14:30", "%H:%M").time())
 location = st.sidebar.text_input("Geburtsort", value="Berlin")
 
-# Klick auf den Berechnen-Button
+# Klick auf Berechnen
 if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.session_state["positions"] = get_planet_positions(birth_date, birth_time)
-    st.session_state["analyzed"] = True
     st.session_state["initial_analysis"] = None
     st.session_state["answers"] = []
 
-# Anzeige der App-Inhalte nach der Berechnung
-if st.session_state["analyzed"]:
+# Wenn ein Horoskop berechnet wurde
+if st.session_state["positions"] is not None:
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
 
@@ -191,7 +186,7 @@ if st.session_state["analyzed"]:
     st.markdown("---")
     st.subheader("📜 KI-Deutung & Horoskop-Interpretation")
 
-    # Erst-Analyse generieren und dauerhaft speichern
+    # Erst-Analyse generieren (falls noch nicht vorhanden)
     if st.session_state["initial_analysis"] is None:
         prompt_text = f"""
         Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
@@ -213,7 +208,7 @@ if st.session_state["analyzed"]:
 
     st.markdown("---")
     
-    # --- FRAGE-BEREICH ---
+    # --- TEXTFELD FÜR FRAGEN (FEST VERANKERT) ---
     st.subheader("💬 Stelle Astraea eine Frage zu deinem Horoskop")
     
     with st.form(key="question_form", clear_on_submit=True):
@@ -223,24 +218,21 @@ if st.session_state["analyzed"]:
         )
         submit_button = st.form_submit_button(label="🔮 Frage stellen")
 
-    if submit_button:
-        if user_question.strip():
-            question_prompt = f"""
-            Du bist Astraea, eine empathische und erfahrene Astrologin.
-            Nutzer: {name}
-            Planetenstände: {positions}
-            
-            Frage des Nutzers: "{user_question}"
-            
-            Beantworte die Frage präzise, empathisch und astrologisch fundiert auf Basis seiner Planetenstände.
-            """
-            with st.spinner("Astraea liest in deinen Sternen..."):
-                answer_text = ask_ai_text(question_prompt)
-                st.session_state["answers"].append((user_question, answer_text))
-        else:
-            st.warning("Bitte gib zuerst eine Frage ein.")
+    if submit_button and user_question.strip():
+        question_prompt = f"""
+        Du bist Astraea, eine empathische und erfahrene Astrologin.
+        Nutzer: {name}
+        Planetenstände: {positions}
+        
+        Frage des Nutzers: "{user_question}"
+        
+        Beantworte die Frage präzise, empathisch und astrologisch fundiert auf Basis seiner Planetenstände.
+        """
+        with st.spinner("Astraea liest in deinen Sternen..."):
+            answer_text = ask_ai_text(question_prompt)
+            st.session_state["answers"].append((user_question, answer_text))
 
-    # Bisherige Fragen und Antworten auflisten
+    # Verlauf anzeigen
     if st.session_state["answers"]:
         for q, a in reversed(st.session_state["answers"]):
             st.markdown(f"**❓ Deine Frage:** {q}")
