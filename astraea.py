@@ -82,12 +82,11 @@ def get_planet_positions(date_obj, time_obj):
     return positions
 
 
-def ask_ai(prompt):
-    """KI-Generator mit automatischer Modell-Erkennung für Groq."""
+def ask_ai_text(prompt):
+    """Generiert den vollständigen KI-Text für zuverlässige Speicherung im Session State."""
     if "GROQ_API_KEY" in st.secrets:
         if not groq_available:
-            yield "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert."
-            return
+            return "⚠️ GROQ_API_KEY gefunden, aber das Python-Paket 'groq' ist nicht installiert."
         
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -111,39 +110,39 @@ def ask_ai(prompt):
                 selected_model = available_models[0]
                 
             if not selected_model:
-                yield "⚠️ Keine aktiven Modelle für diesen Groq API-Key gefunden."
-                return
+                return "⚠️ Keine aktiven Modelle für diesen Groq API-Key gefunden."
 
             response = client.chat.completions.create(
                 model=selected_model,
                 messages=[{"role": "user", "content": prompt}],
-                stream=True,
+                stream=False,
             )
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-            return
+            return response.choices[0].message.content
             
         except Exception as e:
-            yield f"⚠️ Fehler beim Groq API-Aufruf: {e}"
-            return
+            return f"⚠️ Fehler beim Groq API-Aufruf: {e}"
 
     if ollama_available:
         try:
-            stream = ollama.chat(
+            response = ollama.chat(
                 model='llama3',
                 messages=[{'role': 'user', 'content': prompt}],
-                stream=True,
+                stream=False,
             )
-            for chunk in stream:
-                if 'message' in chunk and 'content' in chunk['message']:
-                    yield chunk['message']['content']
-            return
+            return response['message']['content']
         except Exception as e:
-            yield f"⚠️ Lokales Ollama nicht erreichbar: {e}"
-            return
+            return f"⚠️ Lokales Ollama nicht erreichbar: {e}"
 
-    yield "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden."
+    return "⚠️ 'GROQ_API_KEY' wurde in den Streamlit Cloud Secrets nicht gefunden."
+
+
+# --- SESSION STATE INITIALISIEREN ---
+if "analyzed" not in st.session_state:
+    st.session_state["analyzed"] = False
+if "initial_analysis" not in st.session_state:
+    st.session_state["initial_analysis"] = None
+if "answers" not in st.session_state:
+    st.session_state["answers"] = []
 
 
 # --- OBERFLÄCHE (STREAMLIT APP) ---
@@ -170,7 +169,7 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
     st.session_state["answers"] = []
 
 # Anzeige der App-Inhalte nach der Berechnung
-if st.session_state.get("analyzed", False):
+if st.session_state["analyzed"]:
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
 
@@ -192,8 +191,8 @@ if st.session_state.get("analyzed", False):
     st.markdown("---")
     st.subheader("📜 KI-Deutung & Horoskop-Interpretation")
 
-    # Erst-Analyse generieren und dauerhaft im State speichern
-    if st.session_state.get("initial_analysis") is None:
+    # Erst-Analyse generieren und dauerhaft speichern
+    if st.session_state["initial_analysis"] is None:
         prompt_text = f"""
         Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
         Erstelle eine ausführliche persönliche astrologische Analyse für {name}, geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} in {location}.
@@ -208,13 +207,13 @@ if st.session_state.get("analyzed", False):
         4. Aktuelle Botschaft des Universums (Inspirierender Abschluss)
         """
         with st.spinner("Astraea verbindet sich mit den Sternen..."):
-            st.session_state["initial_analysis"] = st.write_stream(ask_ai(prompt_text))
-    else:
-        st.write(st.session_state["initial_analysis"])
+            st.session_state["initial_analysis"] = ask_ai_text(prompt_text)
+
+    st.write(st.session_state["initial_analysis"])
 
     st.markdown("---")
     
-    # --- INTERAKTIVES FRAGE-FELD ---
+    # --- FRAGE-BEREICH ---
     st.subheader("💬 Stelle Astraea eine Frage zu deinem Horoskop")
     
     with st.form(key="question_form", clear_on_submit=True):
@@ -236,13 +235,13 @@ if st.session_state.get("analyzed", False):
             Beantworte die Frage präzise, empathisch und astrologisch fundiert auf Basis seiner Planetenstände.
             """
             with st.spinner("Astraea liest in deinen Sternen..."):
-                answer_text = "".join(list(ask_ai(question_prompt)))
+                answer_text = ask_ai_text(question_prompt)
                 st.session_state["answers"].append((user_question, answer_text))
         else:
             st.warning("Bitte gib zuerst eine Frage ein.")
 
     # Bisherige Fragen und Antworten auflisten
-    if st.session_state.get("answers"):
+    if st.session_state["answers"]:
         for q, a in reversed(st.session_state["answers"]):
             st.markdown(f"**❓ Deine Frage:** {q}")
             st.markdown(f"**🌟 Astraeas Antwort:**\n{a}")
