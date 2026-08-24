@@ -45,10 +45,11 @@ st.markdown("""
 
 # --- HILFSFUNKTIONEN FÜR ASTROLOGIE ---
 def get_planet_positions(date_obj, time_obj):
-    """Berechnet präzise die Positionsdaten der Planeten."""
-    dt = datetime.combine(date_obj, time_obj)
+    """Berechnet präzise die Positionsdaten der Planeten für beliebige Geburtsjahre."""
+    date_str = f"{date_obj.strftime('%Y/%m/%d')} {time_obj.strftime('%H:%M:%S')}"
+    
     observer = ephem.Observer()
-    observer.date = dt
+    observer.date = date_str
 
     planets = {
         "Sonne": ephem.Sun(),
@@ -93,10 +94,9 @@ def ask_ai(prompt):
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
             
-            # Verfügbare Modelle vom Server abfragen
+            # Verfügbare Modelle abfragen
             available_models = [m.id for m in client.models.list().data]
             
-            # Prioritätsliste bekannter Groq-Modelle
             preferred_models = [
                 "llama-3.3-70b-versatile",
                 "llama-3.1-8b-instant",
@@ -105,14 +105,12 @@ def ask_ai(prompt):
                 "mixtral-8x7b-32768"
             ]
             
-            # Wähle das erste verfügbare Modell aus der Liste
             selected_model = None
             for model in preferred_models:
                 if model in available_models:
                     selected_model = model
                     break
             
-            # Fallback auf das allererste verfügbare Modell des Accounts
             if not selected_model and available_models:
                 selected_model = available_models[0]
                 
@@ -159,7 +157,15 @@ st.write("Erstelle dein individuelles Horoskop und erhalte präzise astrologisch
 
 st.sidebar.header("📋 Geburtsdaten eingeben")
 name = st.sidebar.text_input("Name", value="Max Mustermann")
-birth_date = st.sidebar.date_input("Geburtsdatum", value=datetime(1995, 5, 15))
+
+# DATUMS-AUSWAHL EXAKT FÜR DIE 20 JAHRE (1984 BIS 2003)
+birth_date = st.sidebar.date_input(
+    "Geburtsdatum", 
+    value=datetime(1993, 1, 1),
+    min_value=datetime(1984, 1, 1),
+    max_value=datetime(2003, 12, 31)
+)
+
 birth_time = st.sidebar.time_input("Geburtszeit", value=datetime.strptime("14:30", "%H:%M").time())
 location = st.sidebar.text_input("Geburtsort", value="Berlin")
 
@@ -187,7 +193,7 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
 
     prompt_text = f"""
     Du bist eine professionelle, empathische und tiefgründige Astrologin namens Astraea.
-    Erstelle eine ausführliche persönliche astrologische Analyse für {name}, geboren am {birth_date} um {birth_time} in {location}.
+    Erstelle eine ausführliche persönliche astrologische Analyse für {name}, geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} in {location}.
     
     Hier sind die berechneten Planetenstände:
     {positions}
