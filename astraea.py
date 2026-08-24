@@ -94,7 +94,6 @@ def ask_ai(prompt):
         try:
             client = Groq(api_key=st.secrets["GROQ_API_KEY"])
             
-            # Verfügbare Modelle abfragen
             available_models = [m.id for m in client.models.list().data]
             
             preferred_models = [
@@ -158,7 +157,6 @@ st.write("Erstelle dein individuelles Horoskop und erhalte präzise astrologisch
 st.sidebar.header("📋 Geburtsdaten eingeben")
 name = st.sidebar.text_input("Name", value="Max Mustermann")
 
-# DATUMS-AUSWAHL EXAKT FÜR DIE 20 JAHRE (1984 BIS 2003)
 birth_date = st.sidebar.date_input(
     "Geburtsdatum", 
     value=datetime(1993, 1, 1),
@@ -170,12 +168,17 @@ birth_time = st.sidebar.time_input("Geburtszeit", value=datetime.strptime("14:30
 location = st.sidebar.text_input("Geburtsort", value="Berlin")
 
 if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
+    st.session_state["positions"] = get_planet_positions(birth_date, birth_time)
+    st.session_state["analyzed"] = True
+
+# Wenn ein Horoskop berechnet wurde:
+if st.session_state.get("analyzed", False):
     st.header(f"✨ Horoskop für {name}")
     st.caption(f"Geboren am {birth_date.strftime('%d.%m.%Y')} um {birth_time.strftime('%H:%M')} Uhr in {location}")
 
-    with st.spinner("Berechne Planetenstände..."):
-        positions = get_planet_positions(birth_date, birth_time)
+    positions = st.session_state["positions"]
 
+    # Planetenstände in 2 Spalten
     col1, col2 = st.columns(2)
     items = list(positions.items())
     half = len(items) // 2
@@ -207,6 +210,29 @@ if st.sidebar.button("🔮 Horoskop Berechnen & Analysieren"):
 
     with st.spinner("Astraea verbindet sich mit den Sternen..."):
         st.write_stream(ask_ai(prompt_text))
+
+    st.markdown("---")
+    
+    # NEU: FRAGE-BEREICH FÜR DIE NUTZER
+    st.subheader("💬 Stelle Astraea eine persönliche Frage zu deinem Horoskop")
+    user_question = st.text_input("Deine Frage an die Sterne (z.B. 'Was bedeutet mein Mars für meine Karriere?'):")
+    
+    if st.button("🔮 Frage an Astraea stellen"):
+        if user_question.strip():
+            question_prompt = f"""
+            Du bist Astraea, eine empathische und erfahrene Astrologin.
+            Nutzer: {name}
+            Planetenstände: {positions}
+            
+            Der Nutzer stellt dir folgende konkrete Frage:
+            "{user_question}"
+            
+            Beantworte die Frage ausführlich, persönlich und astrologisch fundiert auf Basis seiner Planetenstände.
+            """
+            with st.spinner("Astraea liest in deinen Sternen..."):
+                st.write_stream(ask_ai(question_prompt))
+        else:
+            st.warning("Bitte gib zuerst eine Frage ein.")
 
 st.markdown("---")
 st.caption("🔒 Astraea Astrologie App • Hinweis: Astrologische Interpretationen dienen der Reflexion und Unterhaltung.")
